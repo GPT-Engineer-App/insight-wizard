@@ -1,0 +1,107 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from scipy.stats import linregress
+
+# Set page configuration
+st.set_page_config(page_title="CSV Data Analyzer", layout="wide")
+
+# Initialize session state variables
+if "data" not in st.session_state:
+    st.session_state.data = None
+if "page" not in st.session_state:
+    st.session_state.page = "upload"
+
+# Page 1: CSV Upload and Data Overview
+def page1():
+    st.title("CSV Data Analyzer")
+    st.subheader("Upload your CSV file")
+
+    # CSV file upload
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
+    if uploaded_file is not None:
+        data = pd.read_csv(uploaded_file)
+        st.session_state.data = data
+        st.success("CSV file uploaded successfully!")
+
+        if st.button("Proceed to Data Overview"):
+            st.session_state.page = "overview"
+
+    if st.session_state.page == "overview":
+        st.subheader("Data Overview")
+        st.write(f"Total Rows: {len(st.session_state.data)}")
+        st.write(f"Total Columns: {len(st.session_state.data.columns)}")
+
+        st.subheader("Column List")
+        st.write(st.session_state.data.columns.tolist())
+
+        st.subheader("Interactive Table Generation")
+        selected_columns = st.multiselect("Select columns to display", st.session_state.data.columns)
+        num_rows = st.number_input("Number of rows to display", min_value=1, value=5)
+
+        if selected_columns:
+            st.dataframe(st.session_state.data[selected_columns].head(num_rows))
+        else:
+            st.warning("Please select at least one column.")
+
+        if st.button("Proceed to Chart Generation"):
+            st.session_state.page = "charts"
+
+# Page 2: Dynamic Chart Generation
+def page2():
+    st.title("Dynamic Chart Generation")
+
+    if st.session_state.data is None:
+        st.warning("Please upload a CSV file on Page 1 first.")
+    else:
+        num_charts = st.number_input("Number of charts to generate", min_value=1, max_value=10, value=1)
+
+        for i in range(num_charts):
+            st.subheader(f"Chart {i+1}")
+
+            col1, col2 = st.columns([1, 3])
+
+            with col1:
+                x_column = st.selectbox(f"Select X-axis column for Chart {i+1}", st.session_state.data.columns)
+                x_type = st.radio(f"Select X-axis data type for Chart {i+1}", ("Number", "Date"))
+                y_columns = st.multiselect(f"Select Y-axis column(s) for Chart {i+1}", st.session_state.data.columns)
+                secondary_y = st.checkbox(f"Use secondary Y-axis for Chart {i+1}")
+                color = st.color_picker(f"Select color for Chart {i+1}", "#00BFFF")
+                title = st.text_input(f"Enter chart title for Chart {i+1}")
+                x_start, x_end = st.slider(f"Select X-axis range for Chart {i+1}", 0, len(st.session_state.data)-1, (0, len(st.session_state.data)-1))
+
+            with col2:
+                if x_column and y_columns:
+                    if x_type == "Date":
+                        st.session_state.data[x_column] = pd.to_datetime(st.session_state.data[x_column])
+
+                    fig = px.line(st.session_state.data[x_start:x_end+1], x=x_column, y=y_columns, title=title, color_discrete_sequence=[color])
+
+                    if secondary_y:
+                        fig.update_layout(yaxis2=dict(overlaying='y', side='right'))
+                        for i, y_column in enumerate(y_columns[1:], start=1):
+                            fig.data[i].yaxis = 'y2'
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    for y_column in y_columns:
+                        slope, intercept, r_value, _, _ = linregress(st.session_state.data[x_start:x_end+1][x_column], st.session_state.data[x_start:x_end+1][y_column])
+                        st.write(f"Trendline for {y_column}: y = {slope:.2f}x + {intercept:.2f}, R-value: {r_value:.2f}")
+                else:
+                    st.warning("Please select X-axis and Y-axis column(s).")
+
+        if st.button("Go back to Page 1"):
+            st.session_state.page = "upload"
+
+# Main app
+def main():
+    if st.session_state.page == "upload":
+        page1()
+    elif st.session_state.page == "overview":
+        page1()
+    elif st.session_state.page == "charts":
+        page2()
+
+if __name__ == "__main__":
+    main()
